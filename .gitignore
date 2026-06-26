@@ -1,0 +1,10 @@
+# Real credentials — never commit
+credentials.ini
+
+# Local-only planning docs
+docs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/

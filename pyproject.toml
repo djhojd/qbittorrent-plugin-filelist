@@ -1,0 +1,11 @@
+[project]
+name = "qbittorrent-plugin-filelist"
+version = "1.0.0"
+description = "FileList.io search plugin for qBittorrent"
+requires-python = ">=3.9"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
