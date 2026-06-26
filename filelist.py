@@ -3,10 +3,12 @@
 
 import configparser
 import json
+import logging
 import pathlib
 import re
 import sys
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from urllib.parse import unquote, urlencode
 
 from helpers import download_file, retrieve_url
@@ -32,10 +34,40 @@ class filelist(object):
     _PLACEHOLDERS = {'', 'yourname', 'YOUR_USERNAME', 'YOUR_PASSKEY',
                      'abc123def456...'}
 
-    def __init__(self, config_path=None):
+    def __init__(self, config_path=None, log_path=None):
         if config_path is None:
             config_path = pathlib.Path(__file__).parent / 'credentials.ini'
         self._config_path = pathlib.Path(config_path)
+        if log_path is None:
+            log_path = pathlib.Path(__file__).parent / 'filelist.log'
+        self._logger = self._build_logger(pathlib.Path(log_path))
+
+    @staticmethod
+    def _build_logger(log_path):
+        # One logger per log file path; the rotating handler is attached once.
+        # delay=True means the file is not created until something is logged,
+        # so merely instantiating the plugin leaves no stray log file.
+        logger = logging.getLogger('qbt-filelist:' + str(log_path))
+        logger.setLevel(logging.INFO)
+        if not logger.handlers:
+            try:
+                handler = RotatingFileHandler(
+                    str(log_path), maxBytes=512 * 1024, backupCount=2,
+                    encoding='utf-8', delay=True)
+                handler.setFormatter(logging.Formatter(
+                    '%(asctime)s %(levelname)s %(message)s'))
+                logger.addHandler(handler)
+            except Exception:
+                # Never let logging setup break the plugin.
+                logger.addHandler(logging.NullHandler())
+        return logger
+
+    @staticmethod
+    def _redact(text, secret):
+        text = str(text)
+        if secret:
+            text = text.replace(secret, '***')
+        return text
 
     def download_torrent(self, info):
         print(download_file(info))
@@ -44,6 +76,7 @@ class filelist(object):
         username, passkey, err = self._load_credentials()
         if err:
             print("FileList: " + err, file=sys.stderr)
+            self._logger.error("credentials: %s", err)
             return
         category = self.supported_categories.get(cat, '')
         imdb = self._detect_imdb(what)
@@ -59,12 +92,24 @@ class filelist(object):
             response = retrieve_url("{0}?{1}".format(self.api_url, params))
             data = json.loads(response)
         except Exception as exc:
-            print("FileList: request failed: {0}".format(exc), file=sys.stderr)
+            safe = self._redact(exc, passkey)
+            print("FileList: request failed: {0}".format(safe), file=sys.stderr)
+            self._logger.error("request failed for q=%r cat=%s: %s",
+                               what, cat, safe)
             return
         if not data:
+            self._logger.info("search q=%r cat=%s -> 0 results", what, cat)
             return
+        count = 0
         for torrent in data:
-            prettyPrinter(self._build_result(torrent, passkey))
+            try:
+                prettyPrinter(self._build_result(torrent, passkey))
+                count += 1
+            except Exception as exc:
+                row_id = torrent.get('id') if isinstance(torrent, dict) else '?'
+                self._logger.warning("skipped malformed row id=%s: %s",
+                                     row_id, exc)
+        self._logger.info("search q=%r cat=%s -> %d results", what, cat, count)
 
     def _load_credentials(self):
         parser = configparser.ConfigParser()

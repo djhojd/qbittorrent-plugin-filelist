@@ -4,6 +4,9 @@ credentials.ini
 # Local-only planning docs
 docs/
 
+# Runtime log written next to the plugin
+*.log
+
 # Python
 __pycache__/
 *.pyc

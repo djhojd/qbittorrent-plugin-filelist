@@ -61,6 +61,10 @@ uv run python filelist.py movies "ubuntu"
 
 This requires a real `credentials.ini` placed next to `filelist.py`. It prints pipe-delimited result lines to stdout and any errors to stderr.
 
+## Logging
+
+The plugin writes a log to `filelist.log` in the same folder as `filelist.py` (next to `credentials.ini`). It records one line per search with the query, category, and result count, plus errors (bad credentials, failed requests, skipped malformed result rows). Your passkey is always redacted (`***`) before anything is written, and the log is size-capped (rotates at ~512 KB, keeping 2 old files). The file is created lazily — nothing is written until the first log entry — and it is gitignored so it never gets committed. Check it after a search that misbehaved to see what went wrong.
+
 ## How it works
 
 qBittorrent calls `search(what, cat)` on the `filelist` class. That method loads your credentials, optionally detects an IMDb ID in the query, and calls FileList's `api.php` with the matching category IDs. Each returned torrent is shaped into a result dict and handed to qBittorrent's `prettyPrinter`, one call per result.
